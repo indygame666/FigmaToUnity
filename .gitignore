@@ -1,0 +1,26 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Node
+**/node_modules/
+npm-debug.log*
+
+# Build artifacts
+**/dist/
+**/bin/
+**/obj/
+
+# Unity generated
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+# Unity package cache
+Packages/packages-lock.json
