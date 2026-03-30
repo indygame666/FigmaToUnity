@@ -13,6 +13,8 @@ namespace FigmaToUnity.Converter
         private string _figmaFileKey = string.Empty;
         private string _nodeIdsCsv = string.Empty;
         private string _figmaToken = string.Empty;
+        private string _outputFolder = "Assets/UI/Generated";
+        private string _fileNamePattern = "{nodeName}_{nodeId}";
         private Vector2 _scroll;
         private FigmaImportReport _lastReport;
 
@@ -26,6 +28,8 @@ namespace FigmaToUnity.Converter
         private void OnEnable()
         {
             _figmaToken = FigmaImporterService.LoadSavedToken();
+            _outputFolder = FigmaImporterService.LoadSavedOutputFolder();
+            _fileNamePattern = FigmaImporterService.LoadSavedFileNamePattern();
         }
 
         private void OnGUI()
@@ -57,27 +61,36 @@ namespace FigmaToUnity.Converter
             _figmaToken = EditorGUILayout.PasswordField("Figma Token", _figmaToken);
             _figmaFileKey = EditorGUILayout.TextField("File Key", _figmaFileKey);
             _nodeIdsCsv = EditorGUILayout.TextField("Node IDs (csv)", _nodeIdsCsv);
+            _outputFolder = EditorGUILayout.TextField("Output Folder", _outputFolder);
+            _fileNamePattern = EditorGUILayout.TextField("File Name Pattern", _fileNamePattern);
             EditorGUILayout.HelpBox("Node ID format: 0:1,12:34. For Figma URL node-id=0-1, use 0:1.", MessageType.None);
+            EditorGUILayout.HelpBox("File name placeholders: {nodeName}, {nodeId}. Example: UI_{nodeName}_{nodeId}", MessageType.None);
 
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Save Token"))
             {
                 FigmaImporterService.SaveToken(_figmaToken);
             }
+            if (GUILayout.Button("Save Output Settings"))
+            {
+                FigmaImporterService.SaveOutputSettings(_outputFolder, _fileNamePattern);
+            }
+            EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Preview"))
             {
-                _lastReport = FigmaImporterService.RunPreview(_figmaFileKey, _nodeIdsCsv, _figmaToken);
+                _lastReport = FigmaImporterService.RunPreview(_figmaFileKey, _nodeIdsCsv, _figmaToken, _outputFolder, _fileNamePattern);
             }
 
             if (GUILayout.Button("Import"))
             {
-                _lastReport = FigmaImporterService.RunImport(_figmaFileKey, _nodeIdsCsv, _figmaToken, false);
+                _lastReport = FigmaImporterService.RunImport(_figmaFileKey, _nodeIdsCsv, _figmaToken, _outputFolder, _fileNamePattern, false);
             }
 
             if (GUILayout.Button("Reimport"))
             {
-                _lastReport = FigmaImporterService.RunImport(_figmaFileKey, _nodeIdsCsv, _figmaToken, true);
+                _lastReport = FigmaImporterService.RunImport(_figmaFileKey, _nodeIdsCsv, _figmaToken, _outputFolder, _fileNamePattern, true);
             }
 
             EditorGUILayout.EndHorizontal();

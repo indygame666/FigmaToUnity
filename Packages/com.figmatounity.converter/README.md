@@ -41,10 +41,18 @@
 1. Откройте `Tools/Figma/Importer`.
 2. Укажите `Figma Token`.
 3. Заполните `File Key` и `Node IDs (csv)` или вставьте Figma URL и нажмите `Parse URL`.
-4. Нажмите `Preview`, затем `Import`/`Reimport`.
+4. При необходимости укажите:
+   - `Output Folder` (например, `Assets/UI/Generated`)
+   - `File Name Pattern` (например, `UI_{nodeName}_{nodeId}`)
+5. Нажмите `Preview`, затем `Import`/`Reimport`.
 
 Формат `Node IDs (csv)`: `0:1,12:34`.  
 Для URL вида `node-id=0-1` используйте `0:1`.
+
+Поддерживаемые placeholders в `File Name Pattern`:
+
+- `{nodeName}`
+- `{nodeId}`
 
 ## API Integration
 

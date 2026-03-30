@@ -15,21 +15,25 @@ namespace FigmaToUnity.Converter
     {
         private const string FigmaApiBase = "https://api.figma.com/v1";
         private const string FigmaTokenEditorPrefKey = "FigmaToUnity.FigmaApiToken";
+        private const string OutputFolderEditorPrefKey = "FigmaToUnity.OutputFolder";
+        private const string FileNamePatternEditorPrefKey = "FigmaToUnity.FileNamePattern";
+        private const string DefaultOutputFolder = "Assets/UI/Generated";
+        private const string DefaultFileNamePattern = "{nodeName}_{nodeId}";
 
         /// <summary>
         /// Executes a preview request and returns a report without applying asset updates.
         /// </summary>
-        public static FigmaImportReport RunPreview(string fileKey, string nodeIdsCsv, string figmaToken)
+        public static FigmaImportReport RunPreview(string fileKey, string nodeIdsCsv, string figmaToken, string outputFolder, string fileNamePattern)
         {
-            return BuildReport("Preview", fileKey, nodeIdsCsv, figmaToken, false);
+            return BuildReport("Preview", fileKey, nodeIdsCsv, figmaToken, outputFolder, fileNamePattern, false);
         }
 
         /// <summary>
         /// Executes an import request and returns an operation report.
         /// </summary>
-        public static FigmaImportReport RunImport(string fileKey, string nodeIdsCsv, string figmaToken, bool isReimport)
+        public static FigmaImportReport RunImport(string fileKey, string nodeIdsCsv, string figmaToken, string outputFolder, string fileNamePattern, bool isReimport)
         {
-            return BuildReport(isReimport ? "Reimport" : "Import", fileKey, nodeIdsCsv, figmaToken, isReimport);
+            return BuildReport(isReimport ? "Reimport" : "Import", fileKey, nodeIdsCsv, figmaToken, outputFolder, fileNamePattern, isReimport);
         }
 
         /// <summary>
@@ -48,9 +52,27 @@ namespace FigmaToUnity.Converter
             EditorPrefs.SetString(FigmaTokenEditorPrefKey, token ?? string.Empty);
         }
 
-        private static FigmaImportReport BuildReport(string mode, string fileKey, string nodeIdsCsv, string figmaToken, bool reimport)
+        public static string LoadSavedOutputFolder()
+        {
+            return EditorPrefs.GetString(OutputFolderEditorPrefKey, DefaultOutputFolder);
+        }
+
+        public static string LoadSavedFileNamePattern()
+        {
+            return EditorPrefs.GetString(FileNamePatternEditorPrefKey, DefaultFileNamePattern);
+        }
+
+        public static void SaveOutputSettings(string outputFolder, string fileNamePattern)
+        {
+            EditorPrefs.SetString(OutputFolderEditorPrefKey, string.IsNullOrWhiteSpace(outputFolder) ? DefaultOutputFolder : outputFolder.Trim());
+            EditorPrefs.SetString(FileNamePatternEditorPrefKey, string.IsNullOrWhiteSpace(fileNamePattern) ? DefaultFileNamePattern : fileNamePattern.Trim());
+        }
+
+        private static FigmaImportReport BuildReport(string mode, string fileKey, string nodeIdsCsv, string figmaToken, string outputFolder, string fileNamePattern, bool reimport)
         {
             var token = string.IsNullOrWhiteSpace(figmaToken) ? LoadSavedToken() : figmaToken.Trim();
+            var resolvedOutputFolder = string.IsNullOrWhiteSpace(outputFolder) ? LoadSavedOutputFolder() : outputFolder.Trim();
+            var resolvedFileNamePattern = string.IsNullOrWhiteSpace(fileNamePattern) ? LoadSavedFileNamePattern() : fileNamePattern.Trim();
             var nodeIds = ParseNodeIds(nodeIdsCsv);
             var warnings = new List<string>();
 
@@ -65,6 +87,14 @@ namespace FigmaToUnity.Converter
             if (nodeIds.Count == 0)
             {
                 warnings.Add("Node IDs are empty.");
+            }
+            if (!IsValidAssetsRelativePath(resolvedOutputFolder))
+            {
+                warnings.Add("Output folder must start with 'Assets/' or be exactly 'Assets'.");
+            }
+            if (string.IsNullOrWhiteSpace(resolvedFileNamePattern))
+            {
+                warnings.Add("File name pattern is empty.");
             }
 
             var operations = new List<ImportOperation>();
@@ -81,8 +111,14 @@ namespace FigmaToUnity.Converter
                         NodeId = node.NodeId,
                         NodeName = node.NodeName,
                         Action = reimport ? "update" : "create",
-                        TargetPath = $"Assets/UI/Generated/{SanitizeFileName(node.NodeName)}_{SanitizeFileName(node.NodeId)}.prefab"
+                        TargetPath = BuildTargetPath(resolvedOutputFolder, resolvedFileNamePattern, node.NodeName, node.NodeId)
                     });
+                }
+
+                if (!string.Equals(mode, "Preview", StringComparison.OrdinalIgnoreCase))
+                {
+                    var generationSummary = GeneratePrefabAssets(operations, resolvedOutputFolder, reimport);
+                    warnings.AddRange(generationSummary.Warnings);
                 }
             }
 
@@ -120,6 +156,90 @@ namespace FigmaToUnity.Converter
         private static string BuildTechnicalDetails(List<string> requestedNodeIds, List<ImportOperation> operations)
         {
             return $"Requested nodes: {requestedNodeIds.Count}, resolved nodes: {operations.Count}. API: GET /files/{{key}}/nodes";
+        }
+
+        private static PrefabGenerationSummary GeneratePrefabAssets(List<ImportOperation> operations, string outputFolder, bool reimport)
+        {
+            var summaryWarnings = new List<string>();
+            EnsureAssetFolderPathExists(outputFolder);
+
+            foreach (var operation in operations)
+            {
+                var targetPath = operation.TargetPath;
+                var exists = System.IO.File.Exists(targetPath);
+                if (exists && !reimport)
+                {
+                    summaryWarnings.Add($"Skipped existing prefab: {targetPath}. Use Reimport to overwrite.");
+                    continue;
+                }
+
+                try
+                {
+                    var root = new GameObject(operation.NodeName);
+                    var rectTransform = root.AddComponent<RectTransform>();
+                    rectTransform.sizeDelta = new Vector2(100f, 100f);
+
+                    PrefabUtility.SaveAsPrefabAsset(root, targetPath);
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+                catch (Exception ex)
+                {
+                    summaryWarnings.Add($"Failed to generate prefab for node '{operation.NodeId}': {ex.Message}");
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            return new PrefabGenerationSummary
+            {
+                Warnings = summaryWarnings
+            };
+        }
+
+        private static void EnsureAssetFolderPathExists(string fullPath)
+        {
+            var parts = fullPath.Split('/');
+            var current = parts[0];
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var next = parts[i];
+                var combined = $"{current}/{next}";
+                if (!AssetDatabase.IsValidFolder(combined))
+                {
+                    AssetDatabase.CreateFolder(current, next);
+                }
+
+                current = combined;
+            }
+        }
+
+        private static bool IsValidAssetsRelativePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            return path == "Assets" || path.StartsWith("Assets/", StringComparison.Ordinal);
+        }
+
+        private static string BuildTargetPath(string outputFolder, string fileNamePattern, string nodeName, string nodeId)
+        {
+            var safeNodeName = SanitizeFileName(nodeName);
+            var safeNodeId = SanitizeFileName(nodeId);
+            var fileName = fileNamePattern
+                .Replace("{nodeName}", safeNodeName)
+                .Replace("{nodeId}", safeNodeId)
+                .Trim();
+
+            fileName = SanitizeFileName(fileName);
+            if (!fileName.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName += ".prefab";
+            }
+
+            return $"{outputFolder}/{fileName}";
         }
 
         private static FetchNodesResult FetchNodes(string fileKey, string token, List<string> nodeIds)
@@ -231,6 +351,11 @@ namespace FigmaToUnity.Converter
     internal class FetchNodesResult
     {
         public List<FigmaNodeInfo> Nodes;
+        public List<string> Warnings;
+    }
+
+    internal class PrefabGenerationSummary
+    {
         public List<string> Warnings;
     }
 }
