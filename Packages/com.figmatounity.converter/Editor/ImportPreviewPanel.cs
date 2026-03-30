@@ -3,6 +3,9 @@ using UnityEngine;
 
 namespace FigmaToUnity.Converter
 {
+    /// <summary>
+    /// Renders a compact overview of planned import operations.
+    /// </summary>
     public static class ImportPreviewPanel
     {
         public static void Draw(FigmaImportReport report)
@@ -20,7 +23,8 @@ namespace FigmaToUnity.Converter
 
             foreach (var operation in report.Operations)
             {
-                var label = $"{operation.Action.ToUpperInvariant()} {operation.NodeId} -> {operation.TargetPath}";
+                var nodeName = string.IsNullOrWhiteSpace(operation.NodeName) ? "(unnamed)" : operation.NodeName;
+                var label = $"{operation.Action.ToUpperInvariant()} {nodeName} [{operation.NodeId}] -> {operation.TargetPath}";
                 EditorGUILayout.LabelField(label);
             }
 

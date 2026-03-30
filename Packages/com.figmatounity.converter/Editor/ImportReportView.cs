@@ -3,6 +3,9 @@ using UnityEngine;
 
 namespace FigmaToUnity.Converter
 {
+    /// <summary>
+    /// Renders warnings and technical details produced by the importer pipeline.
+    /// </summary>
     public static class ImportReportView
     {
         public static void Draw(FigmaImportReport report)

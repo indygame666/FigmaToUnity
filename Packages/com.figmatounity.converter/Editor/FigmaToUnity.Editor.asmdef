@@ -1,7 +1,9 @@
 {
   "name": "FigmaToUnity.Editor",
   "rootNamespace": "FigmaToUnity.Converter",
-  "references": [],
+  "references": [
+    "Unity.Newtonsoft.Json"
+  ],
   "includePlatforms": [
     "Editor"
   ],
